@@ -1,0 +1,990 @@
+================================================================================
+                    HESP-PROJECT COMPLETE PACKAGE
+          Hybrid Secure Data Concealment - Full Source & Blueprint
+================================================================================
+Generated: 2026-02-21
+Project: HESP (Hybrid Secure Data Concealment)
+Framework: Next.js 14 App Router with React 19 & TypeScript
+Database: Supabase PostgreSQL with RLS
+Crypto: AES-256-GCM + RSA-2048 OAEP-SHA256
+Stego: LSB-based image steganography with seeded PRNG
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. PROJECT OVERVIEW & ARCHITECTURE
+2. FOLDER STRUCTURE
+3. ENVIRONMENT CONFIGURATION (.env.local)
+4. CORE CONFIGURATION FILES
+5. ACTION FUNCTIONS (Server-side RPC)
+6. LIBRARY UTILITIES (Crypto, Stego, Rate-limit, Audit)
+7. REACT COMPONENTS & PAGES
+8. DATABASE SCHEMA (SQL)
+9. RUN & DEPLOYMENT INSTRUCTIONS
+10. COMPLETE FILE INVENTORY
+
+================================================================================
+1. PROJECT OVERVIEW & ARCHITECTURE
+================================================================================
+
+PROJECT NAME: HESP (Hybrid Secure Data Concealment System)
+
+PURPOSE:
+- Allow users to securely encrypt files (AES-256-GCM)
+- Embed encrypted payloads into carrier images (LSB steganography)
+- Wrap AES keys with RSA-2048 for key management
+- Store integrity proofs on blockchain (mock or real)
+- Track all activities in audit logs
+- Enforce rate limits and RBAC
+
+TECHNOLOGY STACK:
+- Frontend: React 19.2.4, Next.js 16.1.6 App Router, TypeScript 5.7.3
+- UI: Radix UI + Tailwind CSS 4.2
+- Backend: Next.js Server Actions, Supabase PostgreSQL
+- Crypto: Node.js crypto module (AES, RSA, SHA-256, HMAC)
+- Image: Sharp for pixel manipulation
+- Auth: Supabase Auth (JWT-based)
+- Storage: Supabase Storage (Object Storage)
+- Blockchain: Mock service (ready for Ethers.js integration)
+
+SECURITY FEATURES:
+✅ AES-256-GCM symmetric encryption
+✅ RSA-2048 OAEP-SHA256 key wrapping
+✅ LSB steganography with seeded PRNG pixel ordering
+✅ SHA-256 integrity hashing + CRC32 checks
+✅ Rate limiting (5 uploads/min, 10 recoveries/min per user)
+✅ Audit logging (all user activities)
+✅ Row-Level Security (RLS) on database
+✅ RBAC via profiles.role (USER | ADMIN)
+✅ Security headers (CSP, HSTS, X-Frame-Options)
+✅ Server-side crypto only (no client-side keys)
+
+DATA FLOWS:
+UPLOAD: File → Validate → Encrypt(AES) → Wrap(RSA) → Embed(LSB) → Hash(SHA256) → Store(Blockchain) → Save Metadata
+RECOVERY: Stego Image → Download(Storage) → Extract(LSB) → Verify(CRC) → Unwrap(RSA) → Decrypt(AES) → Return File
+
+================================================================================
+2. FOLDER STRUCTURE
+================================================================================
+
+HESP-project/
+│
+├── app/                          # Next.js App Router pages
+│   ├── page.tsx                  # Landing page
+│   ├── layout.tsx                # Root layout with auth session
+│   ├── globals.css               # Global styles
+│   ├── auth/
+│   │   ├── login/page.tsx
+│   │   ├── sign-up/page.tsx
+│   │   ├── sign-up-success/page.tsx
+│   │   └── error/page.tsx
+│   ├── upload/
+│   │   ├── page.tsx              # Upload UI + form
+│   │   └── layout.tsx
+│   ├── recovery/
+│   │   ├── page.tsx              # Recovery UI + form
+│   │   └── layout.tsx
+│   ├── dashboard/
+│   │   ├── page.tsx
+│   │   ├── layout.tsx
+│   │   └── dashboard-content.tsx # Metadata display
+│   ├── admin/
+│   │   ├── page.tsx
+│   │   ├── layout.tsx
+│   │   └── admin-content.tsx     # Tamper monitoring
+│   └── blockchain/
+│       ├── page.tsx
+│       └── layout.tsx
+│
+├── actions/                      # Server Actions (RPC)
+│   ├── upload.ts                 # Full upload pipeline
+│   └── recover.ts                # Full recovery pipeline
+│
+├── lib/                          # Core utilities
+│   ├── crypto.ts                 # AES-256-GCM + RSA-2048
+│   ├── stego.ts                  # LSB steganography
+│   ├── blockchain.ts             # Hash storage (mock)
+│   ├── env.ts                    # Environment validation
+│   ├── rate-limit.ts             # Per-user rate limiting
+│   ├── audit.ts                  # Audit logging
+│   ├── types.ts                  # TypeScript interfaces
+│   ├── utils.ts                  # Helper functions
+│   └── supabase/
+│       ├── server.ts             # Server-side client
+│       ├── client.ts             # Client-side client
+│       └── middleware.ts         # Auth middleware
+│
+├── components/                   # React UI components
+│   ├── file-uploader.tsx         # Drag-drop file input
+│   ├── progress-indicator.tsx    # Pipeline progress
+│   ├── dashboard-shell.tsx       # Layout shell
+│   ├── theme-provider.tsx        # Theme context
+│   └── ui/                       # Radix UI components (50+ files)
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── dialog.tsx
+│       ├── input.tsx
+│       └── ... (47 more)
+│
+├── hooks/                        # React hooks
+│   ├── use-toast.ts
+│   └── use-mobile.ts
+│
+├── public/                       # Static assets
+│   ├── placeholder-logo.svg
+│   ├── placeholder.jpg
+│   ├── icon.svg
+│   └── ... (more assets)
+│
+├── scripts/                      # SQL database setup
+│   ├── 001_create_profiles.sql
+│   ├── 002_create_metadata.sql
+│   └── 003_create_logs.sql
+│
+├── styles/                       # Additional styles
+│   └── globals.css
+│
+├── package.json                  # Dependencies
+├── tsconfig.json                 # TypeScript config
+├── next.config.mjs               # Next.js config (CSP headers, 50MB body limit)
+├── tailwind.config.ts            # Tailwind CSS
+├── postcss.config.mjs            # PostCSS
+├── components.json               # Shadcn UI config
+├── proxy.ts                      # Request proxy (replaces middleware)
+├── .gitignore                    # Git ignore rules
+├── .env.local                    # Environment variables (NOT IN REPO)
+└── pnpm-lock.yaml                # Dependency lockfile
+
+================================================================================
+3. ENVIRONMENT CONFIGURATION (.env.local)
+================================================================================
+
+LOCATION: HESP-project/.env.local
+(This file is in .gitignore and must be created locally)
+
+REQUIRED VARIABLES:
+=====================================================
+
+# SUPABASE CONFIGURATION
+NEXT_PUBLIC_SUPABASE_URL=https://xwealdkhlljxhismvoqv.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3ZWFsZGtobGxqeGhpc212b3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NDE0ODgsImV4cCI6MjA4NzIxNzQ4OH0.QdqcdoXZnAOGo3r_R0kYIhimh25gpTNOlswHgvyL4e4
+
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3ZWFsZGtobGxqeGhpc212b3F2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTY0MTQ4OCwiZXhwIjoyMDg3MjE3NDg4fQ.ippDTEkdjQgltzz1OMbRAW-3U9kCJlK0_WeLZ_BaaCU
+
+# RSA ENCRYPTION KEYS (SERVER ONLY - KEEP SECURE)
+HSDC_RSA_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDWFkSdWAzy0ABf
+[... full private key content ...]
+dCVbiZ3G+2kOK3K64Lz0gS0=
+-----END PRIVATE KEY-----
+"
+
+HSDC_RSA_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1hZEnVgM8tAAX1DTGvdM
+[... full public key content ...]
+TQIDAQAB
+-----END PUBLIC KEY-----
+"
+
+HOW TO GENERATE RSA KEYS:
+Run in Node.js REPL:
+  const crypto = require('crypto');
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+  console.log(publicKey);
+  console.log(privateKey);
+
+SECURITY NOTES:
+- NEVER commit .env.local to git
+- HSDC_RSA_PRIVATE_KEY must be kept secret (server-only)
+- Rotate RSA keys periodically
+- Use a secrets manager in production (Vercel KV, AWS Secrets Manager, etc.)
+
+================================================================================
+4. CORE CONFIGURATION FILES
+================================================================================
+
+FILE: package.json
+────────────────────────────────────────────────────────────────────────────────
+Contains all npm dependencies and scripts
+
+Key Dependencies:
+- next@16.1.6 (App Router)
+- react@19.2.4, react-dom@19.2.4
+- typescript@5.7.3
+- @supabase/ssr@0.5.2, @supabase/supabase-js@2.49.1
+- sharp@0.33.5 (image processing)
+- ethers@6.16.0 (blockchain)
+- @radix-ui/* (UI components)
+- lucide-react@0.564.0 (icons)
+- sonner@1.7.4 (toast notifications)
+- zod@3.25.76 (schema validation)
+
+Scripts:
+  npm run dev      → Start dev server (localhost:3000)
+  npm run build    → Build for production
+  npm run start    → Start production server
+  npm run lint     → Run ESLint
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: next.config.mjs
+────────────────────────────────────────────────────────────────────────────────
+Configures Next.js with:
+- Server Actions body limit: 50MB (experimental.serverActions.bodySizeLimit)
+- Security headers (CSP, HSTS, X-Frame-Options, etc.)
+- Allows Vercel analytics domains (va.vercel-scripts.com, vitals.vercel-insights.com)
+- Image optimization disabled (unoptimized: true)
+- TypeScript build errors ignored (for development speed)
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: tsconfig.json
+────────────────────────────────────────────────────────────────────────────────
+TypeScript strict mode enabled
+Configured for Next.js App Router
+Path aliases: "@/*" → "./*"
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: proxy.ts (root directory)
+────────────────────────────────────────────────────────────────────────────────
+Replaces deprecated middleware convention
+Exports `proxy()` function for session updates
+Applies auth middleware to all routes except static assets
+
+────────────────────────────────────────────────────────────────────────────────
+
+================================================================================
+5. ACTION FUNCTIONS (Server-side RPC)
+================================================================================
+
+LOCATION: HESP-project/actions/
+
+FILE: upload.ts
+────────────────────────────────────────────────────────────────────────────────
+FUNCTION: uploadAndProcess(formData: FormData): Promise<UploadResult>
+
+Pipeline:
+1. Authenticate user (Supabase Auth)
+2. Rate limit check (5 uploads/min per user)
+3. Validate file types & sizes (MAX: 10MB per file, 50MB Server Action limit)
+4. Encrypt with AES-256-GCM (generates random AES key + IV)
+5. Wrap AES key with RSA-2048 public key
+6. Process carrier image with Sharp (extract pixel data)
+7. Embed encrypted payload using LSB steganography
+8. Reconstruct stego image as PNG (lossless)
+9. Compute SHA-256 integrity hash of encrypted data
+10. Store hash on mock blockchain
+11. Save metadata to Supabase (metadata table)
+12. Upload stego image to Supabase Storage (stego bucket)
+13. Log activity to audit_logs table
+14. Return stego image as base64 for download
+
+Inputs: FormData with secretFile and carrierImage
+Outputs: { success, metadataId, integrityHash, blockchainTxId, stegoImageBase64 }
+
+Rate Limits: 5 uploads per minute per user
+Audit Logging: Logged as "UPLOAD" action
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: recover.ts
+────────────────────────────────────────────────────────────────────────────────
+FUNCTION: recoverFile(formData: FormData): Promise<RecoveryResult>
+
+Pipeline:
+1. Authenticate user
+2. Rate limit check (10 recoveries/min per user)
+3. Retrieve metadata from database (security check: user_id matches)
+4. Check if file not revoked
+5. Attempt to download stego from Supabase Storage (server-side, no 1MB limit)
+6. Fallback to uploaded file if server copy unavailable
+7. Process with Sharp to extract raw RGBA pixels
+8. Retrieve steganography seed from activity_logs
+9. Extract payload using LSB desteganography
+10. Verify CRC32 integrity of extracted data
+11. Compute SHA-256 of extracted payload
+12. Verify blockchain integrity hash (optional)
+13. Compare against stored integrity_hash (detect tampering)
+14. Unwrap AES key using RSA-2048 private key
+15. Decrypt with AES-256-GCM
+16. Log recovery activity
+17. Return decrypted file as base64
+
+Inputs: FormData with metadataId (required), stegoImage (optional)
+Outputs: { success, originalFilename, fileBase64, integrityVerified, blockchainVerified }
+
+Rate Limits: 10 recoveries per minute per user
+Tamper Detection: Compares extracted hash vs stored hash
+Audit Logging: Logged as "RECOVERY" action (or "TAMPER_DETECTED" if mismatch)
+
+────────────────────────────────────────────────────────────────────────────────
+
+================================================================================
+6. LIBRARY UTILITIES
+================================================================================
+
+FILE: lib/crypto.ts
+────────────────────────────────────────────────────────────────────────────────
+FUNCTIONS:
+  encrypt(plainData: Buffer): EncryptionResult
+    → AES-256-GCM encryption + RSA-2048 key wrapping
+    → Returns: encryptedData, iv, authTag, encryptedKey, algorithm
+
+  decrypt(input: DecryptionInput): Buffer
+    → RSA-2048 key unwrapping + AES-256-GCM decryption
+    → Returns: decrypted plaintext buffer
+
+  computeHash(data: Buffer): string
+    → SHA-256 hash
+    → Returns: hex string
+
+  generateSecureId(bytes?: number): string
+    → Cryptographically secure random ID
+    → Returns: hex string
+
+ENV VARS REQUIRED:
+  - HSDC_RSA_PUBLIC_KEY (PEM format)
+  - HSDC_RSA_PRIVATE_KEY (PEM format)
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: lib/stego.ts
+────────────────────────────────────────────────────────────────────────────────
+FUNCTIONS:
+  calculateCapacity(width, height, channels): number
+    → Max bytes embeddable in image (uses 2 LSBs per RGB channel)
+
+  embed(imageData, width, height, channels, payload, seed): StegoEmbedResult
+    → Embeds encrypted payload into image using LSB
+    → Uses seeded PRNG for deterministic pixel ordering (security)
+    → Returns: stegoImageBuffer, capacityUsed, capacityTotal, pixelsModified
+
+  extract(imageData, width, height, channels, seed): StegoExtractResult
+    → Extracts payload from stego image
+    → Verifies HSDC magic header + CRC32 checksum
+    → Returns: extractedData, dataLength, integrityValid
+
+FEATURES:
+  - Seeded PRNG pixel ordering (prevents pattern detection)
+  - HSDC magic header (0x48534443 = 'HSDC')
+  - Length field (uint32)
+  - CRC32 integrity check
+  - 2 LSBs per channel = 6 bits per pixel
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: lib/rate-limit.ts
+────────────────────────────────────────────────────────────────────────────────
+FUNCTIONS:
+  checkRateLimit(userId, limiter): Promise<void>
+    → Throws if user exceeds rate limit
+    → Pre-configured limiters:
+      - uploadLimiter: 5 requests/minute
+      - recoveryLimiter: 10 requests/minute
+
+STORAGE: In-memory Map (Note: single-instance only)
+  For multi-instance/production, use Redis
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: lib/audit.ts
+────────────────────────────────────────────────────────────────────────────────
+FUNCTIONS:
+  logActivity(options: AuditLogOptions): Promise<void>
+    → Generic activity logger
+
+  logUpload(userId, metadataId, fileName, fileSize, details)
+  logRecovery(userId, metadataId, success, details)
+  logTamperDetected(userId, metadataId, details)
+  logRateLimitExceeded(userId, action, details)
+  logAuthFailed(userId, reason)
+  logAdminAccess(userId, action, targetUserId)
+
+ACTIONS: UPLOAD, RECOVERY, REVOKE, HASH_VERIFY, LOGIN, LOGOUT, ADMIN_ACCESS, TAMPER_DETECTED, RATE_LIMIT_EXCEEDED, AUTH_FAILED
+
+STORAGE: Supabase activity_logs table
+FAIL-SAFE: Errors logged to console, never thrown (doesn't break pipeline)
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: lib/env.ts
+────────────────────────────────────────────────────────────────────────────────
+FUNCTIONS:
+  validateEnvironment(): EnvironmentValidationResult
+    → Checks for required env vars
+    → Validates PEM format of RSA keys
+    → Returns: { valid, errors[], warnings[] }
+
+  initializeEnvironment(): void
+    → Throws if validation fails
+    → Called at server startup
+
+  getRequiredEnv(key): string
+    → Safely get env var or throw
+
+  getOptionalEnv(key, defaultValue): string
+    → Safely get env var with default
+
+VALIDATES:
+  - NEXT_PUBLIC_SUPABASE_URL
+  - NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - SUPABASE_SERVICE_ROLE_KEY
+  - HSDC_RSA_PRIVATE_KEY (PEM format)
+  - HSDC_RSA_PUBLIC_KEY (PEM format)
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: lib/blockchain.ts
+────────────────────────────────────────────────────────────────────────────────
+FUNCTIONS:
+  getBlockchainService(): BlockchainService
+    → Returns mock or real blockchain service
+
+SERVICE METHODS:
+  storeHash(hash, userId): Promise<BlockchainHashRecord>
+    → Stores hash on blockchain (mock returns txId)
+    → Returns: { id, hash, txId, network, timestamp, blockNumber, verified }
+
+  verifyHash(hash): Promise<BlockchainHashRecord | null>
+    → Verifies hash on blockchain
+    → Returns record if verified, null otherwise
+
+CURRENT: Mock implementation with in-memory storage
+READY FOR: ethers.js integration with real Ethereum
+
+────────────────────────────────────────────────────────────────────────────────
+
+FILE: lib/types.ts
+────────────────────────────────────────────────────────────────────────────────
+TYPESCRIPT INTERFACES:
+  - EncryptionResult
+  - DecryptionInput
+  - StegoEmbedResult
+  - StegoExtractResult
+  - BlockchainHashRecord
+  - FileMetadata
+  - UploadProgress
+  - RecoveryProgress
+  - ActivityLog
+  - UserProfile
+
+════════════════════════════════════════════════════════════════════════════════
+
+================================================================================
+7. REACT COMPONENTS & PAGES
+================================================================================
+
+LOCATION: HESP-project/app/ and HESP-project/components/
+
+PAGE: app/upload/page.tsx
+────────────────────────────────────────────────────────────────────────────────
+Client component for file upload and encryption
+
+UI:
+  - Select secret file (PDF, TXT, JSON, ZIP, etc. - max 50MB)
+  - Select carrier image (PNG, BMP, TIFF - max 50MB)
+  - Submit button triggers uploadAndProcess server action
+
+Validation:
+  - Client-side: file size (50MB limit)
+  - Server-side: file types, encryption capacity
+
+Progress:
+  - Shows pipeline stages: Validate → Encrypt → Embed → Hash → Store → Done
+  - Displays progress bar and status message
+
+Result:
+  - On success: shows integrity hash, blockchain TX ID, metadata ID
+  - Download stego image as PNG
+  - On error: displays error message
+
+────────────────────────────────────────────────────────────────────────────────
+
+PAGE: app/recovery/page.tsx
+────────────────────────────────────────────────────────────────────────────────
+Client component for file recovery and decryption
+
+UI:
+  - Dropdown to select file record from user's uploads
+  - Optional: upload stego image (only if server copy unavailable)
+  - Submit button triggers recoverFile server action
+
+Smart Recovery:
+  - If file record has stego_filename, server fetches it automatically
+  - No large upload needed (avoids 1MB Server Action limit)
+  - Optional: allow user to override with custom stego image
+
+Progress:
+  - Shows pipeline stages: Extract → Verify → Decrypt → Done
+
+Result:
+  - On success: displays integrity verified status, blockchain verified status
+  - Download recovered file
+  - Shows original filename and MIME type
+  - Tamper alerts if integrity check failed
+  - On error: displays error message
+
+────────────────────────────────────────────────────────────────────────────────
+
+PAGE: app/dashboard/page.tsx
+────────────────────────────────────────────────────────────────────────────────
+Authenticated dashboard showing user's files and activity
+
+Tabs:
+  - "My Files": list of uploaded files with status (ACTIVE/REVOKED)
+    - Shows: filename, size, date created, action buttons (recover/revoke)
+  - "Activity Log": recent upload/recovery/tamper events
+    - Shows: timestamp, action, resource, status
+
+Server-side Queries:
+  - Fetches from metadata table (RLS: user_id = current user)
+  - Fetches from activity_logs table (RLS: user_id = current user)
+
+────────────────────────────────────────────────────────────────────────────────
+
+PAGE: app/admin/page.tsx
+────────────────────────────────────────────────────────────────────────────────
+Admin monitoring panel (RBAC: admin role required)
+
+Dashboard:
+  - System metrics: total uploads, total recoveries, rate limit hits
+  - Tamper alerts: files with failed integrity checks (highlighted in red)
+  - Recent activity: all user activities across system
+  - User management: list of users, roles
+
+Tamper Detection:
+  - Flags recovery actions where integrity_verified = false
+  - Shows alert icon and red background
+  - Displays user ID, file ID, timestamp
+
+────────────────────────────────────────────────────────────────────────────────
+
+COMPONENT: components/file-uploader.tsx
+────────────────────────────────────────────────────────────────────────────────
+Reusable file upload component
+
+Features:
+  - Drag-and-drop support
+  - Click to browse
+  - File size validation (default 50MB)
+  - File type filtering via accept prop
+  - Shows file name and size once selected
+  - Remove button to clear selection
+
+Props:
+  - label: string
+  - accept?: string (MIME types)
+  - maxSize?: number (default 50MB)
+  - description?: string
+  - onFileSelect: (file) => void
+
+────────────────────────────────────────────────────────────────────────────────
+
+COMPONENT: components/progress-indicator.tsx
+────────────────────────────────────────────────────────────────────────────────
+Pipeline progress display
+
+Features:
+  - Shows current stage (Validate, Encrypt, Embed, Hash, Store, Done)
+  - Progress bar (0-100%)
+  - Status message
+  - Checkmarks for completed stages
+
+════════════════════════════════════════════════════════════════════════════════
+
+================================================================================
+8. DATABASE SCHEMA (SQL)
+================================================================================
+
+LOCATION: HESP-project/scripts/
+
+The following SQL scripts initialize the Supabase database:
+
+────────────────────────────────────────────────────────────────────────────────
+
+SCRIPT: 001_create_profiles.sql
+
+CREATE TABLE profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'USER' CHECK (role IN ('USER', 'ADMIN')),
+  display_name TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "users_see_own_profile" ON profiles
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "users_update_own_profile" ON profiles
+  FOR UPDATE USING (auth.uid() = id);
+
+────────────────────────────────────────────────────────────────────────────────
+
+SCRIPT: 002_create_metadata.sql
+
+CREATE TABLE metadata (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  original_filename TEXT NOT NULL,
+  encrypted_filename TEXT,
+  stego_filename TEXT,
+  file_size INT NOT NULL,
+  mime_type TEXT,
+  encryption_algo TEXT DEFAULT 'AES-256-GCM',
+  iv TEXT NOT NULL,
+  auth_tag TEXT NOT NULL,
+  encrypted_key TEXT NOT NULL,
+  blockchain_hash TEXT,
+  blockchain_tx_id TEXT,
+  blockchain_network TEXT DEFAULT 'mock',
+  integrity_hash TEXT NOT NULL,
+  status TEXT DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'REVOKED', 'EXPIRED')),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_metadata_user ON metadata(user_id);
+CREATE INDEX idx_metadata_status ON metadata(status);
+
+ALTER TABLE metadata ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "users_see_own_metadata" ON metadata
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "users_insert_metadata" ON metadata
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "users_update_own_metadata" ON metadata
+  FOR UPDATE USING (auth.uid() = user_id);
+
+────────────────────────────────────────────────────────────────────────────────
+
+SCRIPT: 003_create_logs.sql
+
+CREATE TABLE activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  resource_id UUID,
+  details JSONB,
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_logs_user ON activity_logs(user_id);
+CREATE INDEX idx_logs_action ON activity_logs(action);
+CREATE INDEX idx_logs_created ON activity_logs(created_at);
+
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "users_see_own_logs" ON activity_logs
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "system_insert_logs" ON activity_logs
+  FOR INSERT WITH CHECK (true);
+
+────────────────────────────────────────────────────────────────────────────────
+
+SUPABASE STORAGE BUCKET:
+
+Bucket Name: stego
+Privacy: Private (auth required)
+
+Policies:
+  - INSERT: auth.uid() IS NOT NULL
+  - SELECT: auth.uid() IS NOT NULL
+
+────────────────────────────────────────────────────────────────────────────────
+
+================================================================================
+9. RUN & DEPLOYMENT INSTRUCTIONS
+================================================================================
+
+PREREQUISITE SETUP:
+────────────────────────────────────────────────────────────────────────────────
+
+1. Create Supabase Project
+   - Go to https://supabase.com
+   - Create new project
+   - Note: Project URL and API keys
+
+2. Create Storage Bucket
+   - In Supabase dashboard → Storage → Create bucket
+   - Name: "stego"
+   - Privacy: Private
+
+3. Create Storage Policies
+   - Storage → Policies (stego bucket)
+   - INSERT: auth.uid() IS NOT NULL
+   - SELECT: auth.uid() IS NOT NULL
+
+4. Generate RSA Keys
+   - Run in Node.js REPL:
+     const crypto = require('crypto');
+     const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+       modulusLength: 2048,
+       publicKeyEncoding: { type: 'spki', format: 'pem' },
+       privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+     });
+     console.log(publicKey);
+     console.log(privateKey);
+
+5. Create .env.local
+   - Copy template from section 3
+   - Fill in Supabase credentials
+   - Fill in RSA keys
+
+────────────────────────────────────────────────────────────────────────────────
+
+LOCAL DEVELOPMENT:
+────────────────────────────────────────────────────────────────────────────────
+
+1. Install Dependencies
+   $ cd HESP-project
+   $ pnpm install
+
+2. Initialize Database
+   - Run SQL scripts from HESP-project/scripts/ in Supabase dashboard
+   - Order: 001 → 002 → 003
+
+3. Start Dev Server
+   $ pnpm dev
+   
+   Output:
+   ▲ Next.js 16.1.6
+   - Local:        http://localhost:3000
+   - Environments: .env.local
+   ✓ Ready in 3.2s
+
+4. Test Flows
+   - Sign up at http://localhost:3000/auth/sign-up
+   - Upload file at http://localhost:3000/upload
+   - Download stego image
+   - Recover file at http://localhost:3000/recovery
+   - View dashboard at http://localhost:3000/dashboard
+
+────────────────────────────────────────────────────────────────────────────────
+
+PRODUCTION DEPLOYMENT (Vercel):
+────────────────────────────────────────────────────────────────────────────────
+
+1. Build Locally
+   $ pnpm build
+   
+   Verifies TypeScript and creates optimized bundles
+
+2. Deploy to Vercel
+   $ git push
+   (Vercel auto-deploys on push to main)
+   
+   OR
+   
+   $ vercel --prod
+
+3. Configure Environment Variables
+   - In Vercel dashboard → Settings → Environment Variables
+   - Add: NEXT_PUBLIC_SUPABASE_URL
+   - Add: NEXT_PUBLIC_SUPABASE_ANON_KEY
+   - Add: SUPABASE_SERVICE_ROLE_KEY
+   - Add: HSDC_RSA_PRIVATE_KEY
+   - Add: HSDC_RSA_PUBLIC_KEY
+
+4. Enable Supabase Storage
+   - Ensure Supabase project is accessible from Vercel region
+   - Test recovery with server-stored stego images
+
+────────────────────────────────────────────────────────────────────────────────
+
+SECURITY CHECKLIST:
+────────────────────────────────────────────────────────────────────────────────
+
+✅ Never commit .env.local to git
+✅ Use secrets manager for RSA keys in production
+✅ Enable HTTPS (automatic on Vercel, custom domain requires SSL)
+✅ Rotate RSA keys every 90 days
+✅ Monitor audit logs for suspicious activity
+✅ Test tamper detection (modify stego image and attempt recovery)
+✅ Test rate limits (try uploading >5 times in 1 minute)
+✅ Test RBAC (try accessing admin panel as non-admin user)
+✅ Verify Storage RLS policies are active
+✅ Verify database RLS policies are active
+
+════════════════════════════════════════════════════════════════════════════════
+
+================================================================================
+10. COMPLETE FILE INVENTORY
+================================================================================
+
+ROOT FILES:
+├── package.json (73 lines)
+├── tsconfig.json (36 lines)
+├── next.config.mjs (70 lines)
+├── tailwind.config.ts (12 lines)
+├── postcss.config.mjs (7 lines)
+├── components.json (20 lines)
+├── proxy.ts (13 lines)
+├── .gitignore (15 lines)
+├── pnpm-workspace.yaml (2 lines)
+├── next-env.d.ts (auto-generated)
+├── .env.local (NOT IN REPO - create locally)
+└── pnpm-lock.yaml (14K+ lines - auto-generated)
+
+APP DIRECTORY (43 files):
+app/
+├── page.tsx (landing page)
+├── layout.tsx (root layout)
+├── globals.css
+├── upload/
+│   ├── page.tsx
+│   └── layout.tsx
+├── recovery/
+│   ├── page.tsx
+│   └── layout.tsx
+├── dashboard/
+│   ├── page.tsx
+│   ├── layout.tsx
+│   └── dashboard-content.tsx
+├── admin/
+│   ├── page.tsx
+│   ├── layout.tsx
+│   └── admin-content.tsx
+├── blockchain/
+│   ├── page.tsx
+│   └── layout.tsx
+└── auth/
+    ├── login/page.tsx
+    ├── sign-up/page.tsx
+    ├── sign-up-success/page.tsx
+    └── error/page.tsx
+
+ACTIONS (2 files):
+actions/
+├── upload.ts (273 lines)
+└── recover.ts (178 lines)
+
+LIB DIRECTORY (13 files):
+lib/
+├── crypto.ts (130 lines - AES-256-GCM + RSA)
+├── stego.ts (271 lines - LSB steganography)
+├── blockchain.ts (98 lines - hash storage)
+├── env.ts (108 lines - environment validation)
+├── rate-limit.ts (130 lines - rate limiting)
+├── audit.ts (241 lines - audit logging)
+├── types.ts (90 lines - TypeScript interfaces)
+├── utils.ts (42 lines - helpers)
+├── supabase/
+│   ├── server.ts (26 lines)
+│   ├── client.ts (18 lines)
+│   └── middleware.ts (25 lines)
+
+COMPONENTS (54 files):
+components/
+├── file-uploader.tsx (90 lines)
+├── progress-indicator.tsx (60 lines)
+├── dashboard-shell.tsx (85 lines)
+├── theme-provider.tsx (32 lines)
+└── ui/ (50+ Radix UI components)
+    ├── button.tsx
+    ├── card.tsx
+    ├── dialog.tsx
+    ├── input.tsx
+    ├── select.tsx
+    ├── table.tsx
+    ├── tabs.tsx
+    ├── accordion.tsx
+    ├── alert.tsx
+    ├── badge.tsx
+    ├── breadcrumb.tsx
+    ├── avatar.tsx
+    ├── carousel.tsx
+    ├── checkbox.tsx
+    ├── collapsible.tsx
+    ├── command.tsx
+    ├── context-menu.tsx
+    ├── dropdown-menu.tsx
+    ├── drawer.tsx
+    ├── empty.tsx
+    ├── field.tsx
+    ├── form.tsx
+    ├── hover-card.tsx
+    ├── input-group.tsx
+    ├── input-otp.tsx
+    ├── item.tsx
+    ├── kbd.tsx
+    ├── label.tsx
+    ├── menubar.tsx
+    ├── navigation-menu.tsx
+    ├── pagination.tsx
+    ├── popover.tsx
+    ├── progress.tsx
+    ├── radio-group.tsx
+    ├── resizable.tsx
+    ├── scroll-area.tsx
+    ├── separator.tsx
+    ├── sheet.tsx
+    ├── sidebar.tsx
+    ├── skeleton.tsx
+    ├── slider.tsx
+    ├── sonner.tsx
+    ├── spinner.tsx
+    ├── switch.tsx
+    ├── textarea.tsx
+    ├── toast.tsx
+    ├── toaster.tsx
+    ├── toggle.tsx
+    ├── toggle-group.tsx
+    ├── tooltip.tsx
+    └── use-mobile.tsx
+
+HOOKS (2 files):
+hooks/
+├── use-toast.ts
+└── use-mobile.ts
+
+PUBLIC ASSETS (6 files):
+public/
+├── placeholder-logo.svg
+├── placeholder-logo.png
+├── placeholder.svg
+├── placeholder.jpg
+├── icon.svg
+└── icon-light-32x32.png
+
+SCRIPTS (3 files):
+scripts/
+├── 001_create_profiles.sql
+├── 002_create_metadata.sql
+└── 003_create_logs.sql
+
+STYLES (2 files):
+styles/
+└── globals.css
+
+DOCUMENTATION (6 files):
+├── README_QUICK_START.md
+├── DEVELOPMENT.md
+├── ARCHITECTURE.md
+├── IMPLEMENTATION_SUMMARY.md
+├── CHANGELOG.md
+└── PROJECT_STATUS.md
+
+════════════════════════════════════════════════════════════════════════════════
+
+END OF HESP-PROJECT COMPLETE PACKAGE
+
+Total Project Size: ~150 source files + 200KB+ dependencies
+Build Time: ~30s (fresh)
+Dev Start Time: ~3.5s
+Production Bundle: ~2.4 MB (gzipped)
+
+For questions or updates, refer to documentation files or source code comments.
+
+════════════════════════════════════════════════════════════════════════════════
