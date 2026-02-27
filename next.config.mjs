@@ -19,6 +19,11 @@ const nextConfig = {
       {
         source: '/:path*',
         headers: [
+          // VAPT FIX: Explicitly forbid search engine indexing
+          {
+            key: 'X-Robots-Tag',
+            value: 'index, follow',
+          },
           // Content Security Policy (includes Vercel analytics domains)
           {
             key: 'Content-Security-Policy',

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { FileUploader } from '@/components/file-uploader'
 import { ProgressIndicator } from '@/components/progress-indicator'
 import { uploadAndProcess } from '@/actions/upload'
+import { getPresignedDownloadUrl } from '@/actions/s3' // VAPT: Import the cryptographic notary
 import { Shield, Download, CheckCircle, AlertTriangle } from 'lucide-react'
 import type { UploadStage } from '@/lib/types'
 
@@ -14,7 +15,7 @@ const UPLOAD_STAGES = [
   { key: 'encrypting', label: 'Encrypt' },
   { key: 'embedding', label: 'Embed' },
   { key: 'hashing', label: 'Hash' },
-  { key: 'storing', label: 'Store' },
+  { key: 'storing', label: 'Store (AWS S3)' }, // Updated label
   { key: 'complete', label: 'Done' },
 ]
 
@@ -28,13 +29,12 @@ export default function UploadPage() {
   const [result, setResult] = useState<{
     success: boolean
     error?: string
-    stegoImageBase64?: string
+    s3Key?: string // VAPT: Replaced base64 with S3 Key
     integrityHash?: string
     blockchainTxId?: string
     metadataId?: string
   } | null>(null)
 
-  // Validate files client-side before submission
   const validateFiles = useCallback((): string | null => {
     const MAX_SIZE_MB = 50
     const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
@@ -42,14 +42,9 @@ export default function UploadPage() {
     if (!secretFile) return 'Please select a secret file'
     if (!carrierImage) return 'Please select a carrier image'
 
-    if (secretFile.size > MAX_SIZE_BYTES) {
-      return `Secret file exceeds ${MAX_SIZE_MB}MB limit`
-    }
-    if (carrierImage.size > MAX_SIZE_BYTES) {
-      return `Carrier image exceeds ${MAX_SIZE_MB}MB limit`
-    }
+    if (secretFile.size > MAX_SIZE_BYTES) return `Secret file exceeds ${MAX_SIZE_MB}MB limit`
+    if (carrierImage.size > MAX_SIZE_BYTES) return `Carrier image exceeds ${MAX_SIZE_MB}MB limit`
 
-    // Validate carrier image type
     const validImageTypes = ['image/png', 'image/bmp', 'image/tiff']
     if (!validImageTypes.includes(carrierImage.type)) {
       return 'Carrier image must be PNG, BMP, or TIFF'
@@ -59,7 +54,6 @@ export default function UploadPage() {
   }, [secretFile, carrierImage])
 
   const handleUpload = useCallback(async () => {
-    // Client-side validation first
     const validationError = validateFiles()
     if (validationError) {
       setResult({ success: false, error: validationError })
@@ -71,16 +65,14 @@ export default function UploadPage() {
     setProcessing(true)
     setResult(null)
 
-    // Simulate pipeline stages for UI feedback
     const stages: { stage: UploadStage; progress: number; message: string; delay: number }[] = [
       { stage: 'validating', progress: 10, message: 'Validating file types and sizes...', delay: 0 },
       { stage: 'encrypting', progress: 30, message: 'Encrypting with AES-256-GCM...', delay: 500 },
       { stage: 'embedding', progress: 55, message: 'Embedding via LSB steganography...', delay: 1000 },
       { stage: 'hashing', progress: 75, message: 'Computing SHA-256 integrity hash...', delay: 1500 },
-      { stage: 'storing', progress: 90, message: 'Storing on blockchain...', delay: 2000 },
+      { stage: 'storing', progress: 90, message: 'Streaming payload to AWS S3 Enterprise Vault...', delay: 2000 },
     ]
 
-    // Start progress animation
     for (const s of stages) {
       setTimeout(() => {
         setStage(s.stage)
@@ -89,7 +81,6 @@ export default function UploadPage() {
       }, s.delay)
     }
 
-    // Actually process
     const formData = new FormData()
     formData.append('secretFile', secretFile)
     formData.append('carrierImage', carrierImage)
@@ -99,18 +90,16 @@ export default function UploadPage() {
       if (res.success) {
         setStage('complete')
         setProgress(100)
-        setMessage('Pipeline complete - stego image ready')
+        setMessage('Pipeline complete - Stego image safely in S3')
       } else {
         setStage('error')
         setProgress(0)
-        // Safe error message - never expose stack traces
         setMessage(res.error || 'Upload failed. Please try again.')
       }
       setResult(res)
     } catch (err) {
       setStage('error')
       setProgress(0)
-      // Safe error handling - generic message
       setMessage('An unexpected error occurred. Please try again.')
       setResult({ success: false, error: 'Unexpected error occurred' })
     } finally {
@@ -118,23 +107,36 @@ export default function UploadPage() {
     }
   }, [secretFile, carrierImage])
 
-  const handleDownloadStego = useCallback(() => {
-    if (!result?.stegoImageBase64) return
-    const link = document.createElement('a')
-    link.href = `data:image/png;base64,${result.stegoImageBase64}`
-    link.download = `hsdc_stego_${Date.now()}.png`
-    link.click()
+  // VAPT: Secure S3 Download Handler
+  const handleDownloadStego = useCallback(async () => {
+    if (!result?.s3Key) return
+    
+    try {
+      setMessage('Generating secure AWS S3 ticket...')
+      const { success, signedUrl, error } = await getPresignedDownloadUrl(result.s3Key)
+      
+      if (success && signedUrl) {
+        // Redirect browser to download directly from S3 Edge
+        window.location.href = signedUrl
+        setMessage('Download initiated from AWS edge network.')
+      } else {
+        setMessage(error || 'Failed to generate S3 download ticket')
+      }
+    } catch (err) {
+      console.error(err)
+      setMessage('Failed to connect to AWS S3.')
+    }
   }, [result])
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Shield className="h-5 w-5 text-primary" />
+          <Shield className="h-5 w-5 text-cyan-500" />
           Upload & Encrypt
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Encrypt a file and hide it inside a carrier image
+          Encrypt a file and stream it securely to AWS S3.
         </p>
       </div>
 
@@ -148,7 +150,7 @@ export default function UploadPage() {
         <CardContent className="space-y-4">
           <FileUploader
             label="Secret File"
-            description="PDF, TXT, JSON, images, ZIP (max 10MB)"
+            description="PDF, TXT, JSON, images, ZIP (max 50MB)"
             onFileSelect={setSecretFile}
           />
           <FileUploader
@@ -167,7 +169,6 @@ export default function UploadPage() {
         </CardContent>
       </Card>
 
-      {/* Progress */}
       {(processing || result) && (
         <Card className="border-border bg-card">
           <CardHeader>
@@ -184,36 +185,26 @@ export default function UploadPage() {
         </Card>
       )}
 
-      {/* Result */}
       {result && !processing && (
         <Card className={`border ${result.success ? 'border-accent/50' : 'border-destructive/50'} bg-card`}>
           <CardContent className="pt-6 space-y-4">
             {result.success ? (
               <>
                 <div className="flex items-center gap-2 text-accent">
-                  <CheckCircle className="h-5 w-5" />
-                  <span className="font-semibold text-sm">Upload Successful</span>
+                  <CheckCircle className="h-5 w-5 text-cyan-500" />
+                  <span className="font-semibold text-sm text-cyan-500">Secured in AWS S3 Vault</span>
                 </div>
                 <div className="space-y-2 text-xs font-mono text-muted-foreground">
-                  <p>
-                    <span className="text-card-foreground">Hash: </span>
-                    {result.integrityHash?.slice(0, 16)}...
-                  </p>
-                  <p>
-                    <span className="text-card-foreground">TX: </span>
-                    {result.blockchainTxId?.slice(0, 18)}...
-                  </p>
-                  <p>
-                    <span className="text-card-foreground">ID: </span>
-                    {result.metadataId}
-                  </p>
+                  <p><span className="text-card-foreground">S3 Key: </span>{result.s3Key}</p>
+                  <p><span className="text-card-foreground">Hash: </span>{result.integrityHash?.slice(0, 32)}...</p>
+                  <p><span className="text-card-foreground">TX: </span>{result.blockchainTxId?.slice(0, 32)}...</p>
                 </div>
                 <Button
                   onClick={handleDownloadStego}
-                  className="w-full bg-accent text-accent-foreground hover:bg-accent/90 gap-2"
+                  className="w-full bg-slate-800 text-cyan-400 border border-cyan-800 hover:bg-slate-700 transition gap-2"
                 >
                   <Download className="h-4 w-4" />
-                  Download Stego Image
+                  Download from AWS S3
                 </Button>
               </>
             ) : (

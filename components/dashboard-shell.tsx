@@ -9,7 +9,6 @@ import {
   Upload,
   Download,
   Link2,
-  Settings,
   LogOut,
   Menu,
   X,
@@ -18,12 +17,12 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 
+// VAPT FIX: Total Eradication of Admin route from UI to prevent Information Disclosure
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/upload', label: 'Upload & Encrypt', icon: Upload },
   { href: '/recovery', label: 'Recovery', icon: Download },
   { href: '/blockchain', label: 'Blockchain', icon: Link2 },
-  { href: '/admin', label: 'Admin', icon: Settings },
 ]
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -42,7 +41,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-sidebar-border bg-sidebar">
         <div className="flex items-center gap-2 px-6 py-5 border-b border-sidebar-border">
-          <Shield className="h-6 w-6 text-sidebar-primary" />
+          <Shield className="h-6 w-6 text-cyan-500" />
           <span className="text-lg font-bold tracking-tight font-mono text-sidebar-foreground">
             HSDC
           </span>
@@ -82,9 +81,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       {/* Mobile Header */}
       <div className="flex flex-1 flex-col">
         <header className="flex md:hidden items-center justify-between px-4 py-3 border-b border-border bg-card">
-          <div className="flex items-center gap-2 text-primary">
+          <div className="flex items-center gap-2 text-cyan-500">
             <Shield className="h-5 w-5" />
-            <span className="text-sm font-bold font-mono">HSDC</span>
+            <span className="text-sm font-bold font-mono text-white">HSDC</span>
           </div>
           <Button
             variant="ghost"

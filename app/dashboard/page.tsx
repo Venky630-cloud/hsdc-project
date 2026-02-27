@@ -5,6 +5,7 @@ import { DashboardContent } from './dashboard-content'
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  
   if (!user) redirect('/auth/login')
 
   const { data: profile } = await supabase
@@ -13,19 +14,19 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
+  // VAPT Modification: Fetch ALL files so the CisoDataTable can paginate them
   const { data: files } = await supabase
     .from('metadata')
     .select('*')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(5)
 
   const { data: logs } = await supabase
     .from('activity_logs')
     .select('*')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(10)
+    .limit(50)
 
   const { count: totalFiles } = await supabase
     .from('metadata')
